@@ -6,15 +6,22 @@
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aTexCoord;
 
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
-
-uniform mat4 mvp;
-
 out vec2 TexCoord;
-out vec3 worldPos;
+out vec3 FragPos;
 out float height;
+out vec3 normal;
+out vec4 fragPosLightSpace;
+
+
+uniform mat4 model;
+uniform mat4 vp;
+uniform mat4 lightSpaceMatrix;
+
+uniform int Uoctaves;
+uniform float Ulacunarety;
+uniform float Upersistance;
+uniform float Uscale;
+uniform float UheightMultipier;
 
 uint pcg_hash(uint value)
 {
@@ -23,107 +30,96 @@ uint pcg_hash(uint value)
     return (word >> 22u) ^ word;
 }
 
-vec2 gradiant_v2(uint x, uint y){
-	vec2 result;
-    uint seed = x + y * 1619u;
-    
-    uint hashX = pcg_hash(seed);
-    uint hashY = pcg_hash(seed + 314159265u);
-    
-    // Convert both to [0.0, 1.0]
-    float randX = float(hashX) / MAX_UINT;
-    float randY = float(hashY) / MAX_UINT;
-    
-    result = vec2(2.0 * randX - 1.0, 2.0 * randY - 1.0);
-    
-    // result = normalize(result);
-    
-    return result;
+vec2 v2_hash(vec2 p){
+	uvec2 q = uvec2(ivec2(p));  // ✅ handles negative coords correctly
+    uint seed = q.x + q.y * 1619u;
+    uint hx = pcg_hash(seed);
+    uint hy = pcg_hash(seed + 314159265u);
+    float rx = float(hx) / MAX_UINT * 2.0 - 1.0;
+    float ry = float(hy) / MAX_UINT * 2.0 - 1.0;
+    return normalize(vec2(rx, ry));
 }
 
-float perlin_noise(vec2 p){
-    //THIS IS A HACK FOR NOW 
-    ivec2 i = ivec2(floor(p));
+vec3 perlinNoise(in vec2 p){
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+
+	// quantic instead of linear
+	vec2 u = f*f*f*(f*(f*6.0-15.0)+10.0);
+    vec2 du = 30.0*f*f*(f*(f-2.0)+1.0);
     
-    vec2 f = fract(p);
+    vec2 gb = v2_hash(i + vec2(1.0,0.0));
+    vec2 gc = v2_hash(i + vec2(0.0,1.0));
+    vec2 ga = v2_hash(i + vec2(0.0,0.0));
+    vec2 gd = v2_hash(i + vec2(1.0,1.0));
     
-    vec2 s = f * f * (3.0 - 2.0 * f);
+    float va = dot(ga, f - vec2(0.0,0.0));
+    float vb = dot(gb, f - vec2(1.0,0.0));
+    float vc = dot(gc, f - vec2(0.0,1.0));
+    float vd = dot(gd, f - vec2(1.0,1.0));
     
-    uint minX = uint(i.x);
-    uint minY = uint(i.y);
-    uint maxX = minX + 1u;
-    uint maxY = minY + 1u;
-    
-    vec2 topLeft_grad     = gradiant_v2(minX, minY);
-    vec2 topRight_grad    = gradiant_v2(maxX, minY);
-    vec2 bottomLeft_grad  = gradiant_v2(minX, maxY);
-    vec2 bottomRight_grad = gradiant_v2(maxX, maxY);
-    
-    vec2 topLeft_toPoint     = f - vec2(0.0, 0.0);
-    vec2 topRight_toPoint    = f - vec2(1.0, 0.0);
-    vec2 bottomLeft_toPoint  = f - vec2(0.0, 1.0);
-    vec2 bottomRight_toPoint = f - vec2(1.0, 1.0);
-    
-    float tl = dot(topLeft_grad, topLeft_toPoint);
-    float tr = dot(topRight_grad, topRight_toPoint);
-    float bl = dot(bottomLeft_grad, bottomLeft_toPoint);
-    float br = dot(bottomRight_grad, bottomRight_toPoint);
-    
-    float top = mix(tl, tr, s.x);
-    float bottom = mix(bl, br, s.x);
-    
-    float result = mix(top, bottom, s.y);
-    
-    return result;
+    return vec3( va + u.x*(vb-va) + u.y*(vc-va) + u.x*u.y*(va-vb-vc+vd),   // value
+                 ga + u.x*(gb-ga) + u.y*(gc-ga) + u.x*u.y*(ga-gb-gc+gd) +  // derivatives
+                 du * (u.yx*(va-vb-vc+vd) + vec2(vb,vc) - va));
+
 }
 
-float fbm(vec2 p, uint seed, float scale, int octaves, float persistance, float lacunarity){
-	float value = 0.0;
-    float amplitude = 1.0;
-    float frequency = 1.0;
-    float maxValue = 0.0;
+vec3 fbm(in vec2 x){
+	int octaves = Uoctaves;
+	// float f = 2.0;  // could be 2.0
+    // float s = 0.5;  // could be 0.5
+	float f = Ulacunarety;  // could be 2.0
+    float s = Upersistance;  // could be 0.5
+    float a = 0.0;
+    float b = 0.5;
+    vec2  d = vec2(0.0);
+    mat2  m = mat2(1.0,0.0,
+                   0.0,1.0);
+    const mat2 m2 = mat2(  0.80,  0.60,
+                      -0.60,  0.80 );
+    const mat2 m2i = mat2( 0.80, -0.60,
+                       0.60,  0.80 );
+    for( int i=0; i<octaves; i++ )
+    {
+        vec3 n = perlinNoise(x);
+        a += b*n.x;          // accumulate values
+        d += b*m*n.yz;      // accumulate derivatives
+        b *= s;
+        x = f*m2*x;
+        m = f*m2i*m;
+    }
+    return vec3( a, d );
 	
-	if(scale == 0.0){
-		scale = 0.0001;
-	}
-	
-	for(int i = 0; i < octaves; ++i){
-		uint octaveSeed = pcg_hash(seed + uint(i));
-        vec2 octaveOffset = vec2(pcg_hash(octaveSeed), pcg_hash(octaveSeed + 100u)) / MAX_UINT * 100.0;
-        
-		vec2 sampledP = p / scale * frequency + octaveOffset;
-		float n = perlin_noise(sampledP);
-        value     += n * amplitude;
-        maxValue  += amplitude;
-        amplitude *= persistance;
-        frequency *= lacunarity;
-	}
-	
-	if(value > maxValue){
-		value = maxValue;
-	}
-	
-	return value;
+}
+
+vec4 generateTerrain(in vec2 p, float heightMultipier, float scale){
+    vec3 e = fbm( p/scale + vec2(1.0,-2.0) );
+    e.x  = heightMultipier*e.x + heightMultipier;
+    e.yz = heightMultipier*e.yz;
+
+    // cliff
+    // vec2 c = smoothstepd( 550.0, 600.0, e.x );
+	// e.x  = e.x  + 90.0*c.x;
+	// e.yz = e.yz + 90.0*c.y*e.yz;     // chain rule
+
+    e.yz /= scale;
+    return vec4( e.x, normalize( vec3(-e.y,1.0,-e.z) ) );
 }
 
 void main(){
-	
 	vec4 wp = vec4(aPos, 1.0) * model;
-	worldPos = wp.xyz;
+	// float heightMultipier = 300.0;
+    vec4 terrain = generateTerrain(wp.xz, UheightMultipier, Uscale);
+    float h = terrain.x;
+    vec3 n = terrain.yzw;
 	
-	float heightMultiplier = 50.0;
-    
-    float h = fbm(worldPos.xz , 3u, 100.0, 5, 0.5, 2.2);
-	h = h * 0.5 + 0.5;
-	height = h;
-    
-	//easing function
-	h = h * h * h * h * h;
-    
-	h *= heightMultiplier;
-    
-	
-	gl_Position = vec4(aPos.x, h, aPos.z, 1.0) * mvp;
+	height = h / (UheightMultipier * 2);
+	normal = n;
 	TexCoord = aTexCoord;
+	FragPos = vec3(wp.x, h, wp.z);    
+    fragPosLightSpace = vec4(FragPos, 1.0) * lightSpaceMatrix;
+	
+	gl_Position = vec4(wp.x, h, wp.z, 1.0) * vp;
+	// gl_Position = vec4(wp.x, wp.y, wp.z, 1.0) * vp;
 }
 
