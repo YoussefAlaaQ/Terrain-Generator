@@ -2,21 +2,6 @@
 
 A real-time **procedural terrain generation system** built using **C++ and OpenGL**.
 
-## 🚀 Features
+Terrain is generated using perlin noise function to create natural landscapes.
 
-- 🧩 **Chunk-Based Terrain System**  
-  Terrain is divided into manageable chunks for efficient rendering and scalability.
-
-- 🌄 **Procedural Generation**  
-  Terrain is generated using noise functions to create natural landscapes.
-
-- 🎮 **Real-Time Rendering**  
-  Built with modern OpenGL and GLSL shaders.
-
-## 🔮 Future Improvements
-
-- LOD system  
-- Vegetation (trees/grass)  
-- Texture blending  
-- Multithreading
-- PBR and lighting 
+Picture
