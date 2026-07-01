@@ -10,8 +10,8 @@ copy "dependancy\SDL3.dll" "build\"
 cls
 
 REM Store include & linker flags (no quotes!)
-set incPath=/I S:\inc
-set libPath=/LIBPATH:C:\SDL3\MSVC\lib\x64
+set incPath=/I \inc
+set libPath=/LIBPATH:\lib\SDL3\MSVC\lib\x64
 
 set libs=SDL3.lib user32.lib shell32.lib Gdi32.lib Opengl32.lib
 
