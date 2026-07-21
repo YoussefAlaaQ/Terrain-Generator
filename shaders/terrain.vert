@@ -5,13 +5,22 @@
 
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aTexCoord;
+layout (location = 2) in vec3 aInstancePos;
 
 out vec2 TexCoord;
 out vec3 FragPos;
 out float height;
-out vec3 normal;
+out vec3 geoNormal;
+out mat3 TBN;
 out vec4 fragPosLightSpace;
+out vec3 viewPos_out;
 
+out vec3 tangentLightDir;
+out vec3 tangentViewPos;
+out vec3 tangentFragPos;
+
+uniform vec3 lightDir;
+uniform vec3 viewPos;
 
 uniform mat4 model;
 uniform mat4 vp;
@@ -92,7 +101,7 @@ vec3 fbm(in vec2 x){
 	
 }
 
-vec4 generateTerrain(in vec2 p, float heightMultipier, float scale){
+vec4 generateTerrain(in vec2 p, float heightMultipier, float scale, out vec3 tangent, out vec3 bitangent){
     vec3 e = fbm( p/scale + vec2(1.0,-2.0) );
     e.x  = heightMultipier*e.x + heightMultipier;
     e.yz = heightMultipier*e.yz;
@@ -103,21 +112,36 @@ vec4 generateTerrain(in vec2 p, float heightMultipier, float scale){
 	// e.yz = e.yz + 90.0*c.y*e.yz;     // chain rule
 
     e.yz /= scale;
+    tangent   = normalize(vec3(1.0, e.y, 0.0));
+    bitangent = normalize(vec3(0.0, e.z, 1.0));
+    
     return vec4( e.x, normalize( vec3(-e.y,1.0,-e.z) ) );
 }
 
 void main(){
-	vec4 wp = vec4(aPos, 1.0) * model;
+	// vec4 wp = vec4(aPos, 1.0) * model;
+	// vec3 worldPos = aPos + aInstancePos;
+	vec4 wp = vec4(aPos + aInstancePos, 1.0);
 	// float heightMultipier = 300.0;
-    vec4 terrain = generateTerrain(wp.xz, UheightMultipier, Uscale);
+    vec3 tangent;
+    vec3 bitangent;
+    vec4 terrain = generateTerrain(wp.xz, UheightMultipier, Uscale, tangent, bitangent);
     float h = terrain.x;
     vec3 n = terrain.yzw;
 	
 	height = h / (UheightMultipier * 2);
-	normal = n;
+	
+	geoNormal = n;
+	TBN = mat3(tangent, bitangent, geoNormal);
+	
 	TexCoord = aTexCoord;
 	FragPos = vec3(wp.x, h, wp.z);    
     fragPosLightSpace = vec4(FragPos, 1.0) * lightSpaceMatrix;
+    viewPos_out = viewPos;
+	mat3 invTBN = transpose(TBN);
+    tangentLightDir = invTBN * lightDir;
+    tangentViewPos  = invTBN * viewPos;
+    tangentFragPos  = invTBN * FragPos;
 	
 	gl_Position = vec4(wp.x, h, wp.z, 1.0) * vp;
 	// gl_Position = vec4(wp.x, wp.y, wp.z, 1.0) * vp;

@@ -4,6 +4,7 @@
 #define PI 3.14159265359
 
 layout (location = 0) in vec3 aPos;
+layout (location = 2) in vec3 aInstancePos;
 
 uniform mat4 model;
 uniform mat4 lightSpaceMatrix;
@@ -98,7 +99,9 @@ vec4 generateTerrain(in vec2 p, float heightMultipier, float scale){
 }
 
 void main(){
-    vec4 wp = vec4(aPos, 1.0) * model;
+    // vec4 wp = vec4(aPos, 1.0) * model;
+    vec4 wp = vec4(aPos + aInstancePos, 1.0);
+    
     float heightMultipier = 300.0;
     vec4 terrain = generateTerrain(wp.xz, UheightMultipier, Uscale);
     float h = terrain.x;

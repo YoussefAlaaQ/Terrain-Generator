@@ -116,8 +116,6 @@ make_vec3(v4 v){
 	return result;
 }
 
-
-
 inline v4
 make_vec4(float x, float y, float z, float w){
 	v4 result = {0};
@@ -154,6 +152,17 @@ v3_subtract(v3 vec1, v3 vec2){
 	result.x = vec1.x - vec2.x;
 	result.y = vec1.y - vec2.y;
 	result.z = vec1.z - vec2.z;
+	
+	return result;
+}
+
+inline v4 
+v4_subtract(v4 vec1, v4 vec2){
+	v4 result = {};
+	result.x = vec1.x - vec2.x;
+	result.y = vec1.y - vec2.y;
+	result.z = vec1.z - vec2.z;
+	result.w = vec1.w - vec2.w;
 	
 	return result;
 }
@@ -245,6 +254,11 @@ operator + (v3 vec1, v3 vec2){
 v3 
 operator - (v3 vec1, v3 vec2){
 	return v3_subtract(vec1, vec2);
+}
+
+v4
+operator - (v4 vec1, v4 vec2){
+	return v4_subtract(vec1, vec2);
 }
 
 v3&
@@ -464,7 +478,6 @@ mat4_inverse(mat4 mat){
 	
 	return inverse;
 }
-
 mat4
 new_mat4_inverse(mat4 m){
     float A2323 = m.m[2][2] * m.m[3][3] - m.m[2][3] * m.m[3][2];
@@ -485,6 +498,7 @@ new_mat4_inverse(mat4 m){
     float A0212 = m.m[1][0] * m.m[2][2] - m.m[1][2] * m.m[2][0];
     float A0113 = m.m[1][0] * m.m[3][1] - m.m[1][1] * m.m[3][0];
     float A0112 = m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0];
+    float A0012 = m.m[0][0] * m.m[1][1] - m.m[0][1] * m.m[1][0];
 
     float det = m.m[0][0] * (m.m[1][1] * A2323 - m.m[1][2] * A1323 + m.m[1][3] * A1223)
               - m.m[0][1] * (m.m[1][0] * A2323 - m.m[1][2] * A0323 + m.m[1][3] * A0223)
@@ -514,7 +528,7 @@ new_mat4_inverse(mat4 m){
     result.m[3][0] = -invDet * (m.m[1][0] * A1223 - m.m[1][1] * A0223 + m.m[1][2] * A0123);
     result.m[3][1] =  invDet * (m.m[0][0] * A1223 - m.m[0][1] * A0223 + m.m[0][2] * A0123);
     result.m[3][2] = -invDet * (m.m[0][0] * A1213 - m.m[0][1] * A0213 + m.m[0][2] * A0113);
-    result.m[3][3] =  invDet * (m.m[0][0] * A1212 - m.m[0][1] * A0112 + m.m[0][2] * A0112);
+    result.m[3][3] =  invDet * (m.m[0][0] * A1212 - m.m[0][1] * A0112 + m.m[0][2] * A0012);
 
     return result;
 }
@@ -678,16 +692,27 @@ inline mat4
 mat4_perspective_finite(float fov, float aspectRatio, float nearPlane, float farPlane){
     mat4 result = {0};
     
-    float tanHalfView = tanf(fov / 2.0f);
-    float top   = nearPlane * tanHalfView;
-    float right = top * aspectRatio;
+    float tanHalfFov = tanf(fov / 2.0f);
+	float top   =  nearPlane * tanHalfFov;
+	float bottom = -nearPlane * tanHalfFov;
+	float right  =  top * aspectRatio;
+	float left   = -top * aspectRatio;
 
-    result.m[0][0] =  nearPlane / right;
-    result.m[1][1] =  nearPlane / top;
-    result.m[2][2] = -(farPlane + nearPlane) / (farPlane - nearPlane);
-    result.m[2][3] = -1.0f;
-    result.m[3][2] = -(2.0f * farPlane * nearPlane) / (farPlane - nearPlane);
+    // result.m[0][0] =  nearPlane / right;
+    // result.m[1][1] =  nearPlane / top;
+    // result.m[2][2] = -(farPlane + nearPlane) / (farPlane - nearPlane);
+    // result.m[2][3] = -1.0f;
+    // result.m[3][2] = -(2.0f * farPlane * nearPlane) / (farPlane - nearPlane);
 
+	result.m[0][0] = 2.0f * nearPlane / (right - left);
+	result.m[1][1] = 2.0f * nearPlane / (top - bottom);
+	result.m[2][2] = -(farPlane + nearPlane) / (farPlane - nearPlane);
+	
+	result.m[2][0] = (right + left) / (right - left);  
+	result.m[2][1] = (top + bottom) / (top - bottom);
+	result.m[2][3] = -1.0f;
+	result.m[3][2] = -(2.0f * farPlane * nearPlane) / (farPlane - nearPlane);
+	  
     return result;
 }
 
@@ -770,10 +795,67 @@ mat3_to_mat4(mat3 m){
 	return result;
 }
 
+void
+convert_mat4_to_1DArray(mat4 mat, float out[16]){
+	int i = 0;
+	for(int row = 0; row < 4; ++row){
+		for(int col = 0; col < 4; ++col){
+			out[i++] = mat.m[row][col];
+		}
+	}
+}
+
+mat4 invertRowMajorMESA(mat4 mat)
+{
+	float m[16];
+	convert_mat4_to_1DArray(mat, m);
+    float inv[16], det;
+    float invOut[16];
+    int i;
+  
+    inv[ 0] =  m[5] * m[10] * m[15] - m[5] * m[14] * m[11] - m[6] * m[9] * m[15] + m[6] * m[13] * m[11] + m[7] * m[9] * m[14] - m[7] * m[13] * m[10];
+    inv[ 1] = -m[1] * m[10] * m[15] + m[1] * m[14] * m[11] + m[2] * m[9] * m[15] - m[2] * m[13] * m[11] - m[3] * m[9] * m[14] + m[3] * m[13] * m[10];
+    inv[ 2] =  m[1] * m[ 6] * m[15] - m[1] * m[14] * m[ 7] - m[2] * m[5] * m[15] + m[2] * m[13] * m[ 7] + m[3] * m[5] * m[14] - m[3] * m[13] * m[ 6];
+    inv[ 3] = -m[1] * m[ 6] * m[11] + m[1] * m[10] * m[ 7] + m[2] * m[5] * m[11] - m[2] * m[ 9] * m[ 7] - m[3] * m[5] * m[10] + m[3] * m[ 9] * m[ 6];
+    inv[ 4] = -m[4] * m[10] * m[15] + m[4] * m[14] * m[11] + m[6] * m[8] * m[15] - m[6] * m[12] * m[11] - m[7] * m[8] * m[14] + m[7] * m[12] * m[10];
+    inv[ 5] =  m[0] * m[10] * m[15] - m[0] * m[14] * m[11] - m[2] * m[8] * m[15] + m[2] * m[12] * m[11] + m[3] * m[8] * m[14] - m[3] * m[12] * m[10];
+    inv[ 6] = -m[0] * m[ 6] * m[15] + m[0] * m[14] * m[ 7] + m[2] * m[4] * m[15] - m[2] * m[12] * m[ 7] - m[3] * m[4] * m[14] + m[3] * m[12] * m[ 6];
+    inv[ 7] =  m[0] * m[ 6] * m[11] - m[0] * m[10] * m[ 7] - m[2] * m[4] * m[11] + m[2] * m[ 8] * m[ 7] + m[3] * m[4] * m[10] - m[3] * m[ 8] * m[ 6];
+    inv[ 8] =  m[4] * m[ 9] * m[15] - m[4] * m[13] * m[11] - m[5] * m[8] * m[15] + m[5] * m[12] * m[11] + m[7] * m[8] * m[13] - m[7] * m[12] * m[ 9];
+    inv[ 9] = -m[0] * m[ 9] * m[15] + m[0] * m[13] * m[11] + m[1] * m[8] * m[15] - m[1] * m[12] * m[11] - m[3] * m[8] * m[13] + m[3] * m[12] * m[ 9];
+    inv[10] =  m[0] * m[ 5] * m[15] - m[0] * m[13] * m[ 7] - m[1] * m[4] * m[15] + m[1] * m[12] * m[ 7] + m[3] * m[4] * m[13] - m[3] * m[12] * m[ 5];
+    inv[11] = -m[0] * m[ 5] * m[11] + m[0] * m[ 9] * m[ 7] + m[1] * m[4] * m[11] - m[1] * m[ 8] * m[ 7] - m[3] * m[4] * m[ 9] + m[3] * m[ 8] * m[ 5];
+    inv[12] = -m[4] * m[ 9] * m[14] + m[4] * m[13] * m[10] + m[5] * m[8] * m[14] - m[5] * m[12] * m[10] - m[6] * m[8] * m[13] + m[6] * m[12] * m[ 9];
+    inv[13] =  m[0] * m[ 9] * m[14] - m[0] * m[13] * m[10] - m[1] * m[8] * m[14] + m[1] * m[12] * m[10] + m[2] * m[8] * m[13] - m[2] * m[12] * m[ 9];
+    inv[14] = -m[0] * m[ 5] * m[14] + m[0] * m[13] * m[ 6] + m[1] * m[4] * m[14] - m[1] * m[12] * m[ 6] - m[2] * m[4] * m[13] + m[2] * m[12] * m[ 5];
+    inv[15] =  m[0] * m[ 5] * m[10] - m[0] * m[ 9] * m[ 6] - m[1] * m[4] * m[10] + m[1] * m[ 8] * m[ 6] + m[2] * m[4] * m[ 9] - m[2] * m[ 8] * m[ 5];
+  
+    det = m[0] * inv[0] + m[4] * inv[1] + m[8] * inv[2] + m[12] * inv[3];
+  
+    if(det == 0){
+        printf("no inverse \n");
+        return {{}};
+	}
+    det = 1.f / det;
+  
+    for(i = 0; i < 16; i++)
+        invOut[i] = inv[i] * det;
+
+	mat4 result;
+	int c = 0;
+	for(int row = 0; row < 4; ++row){
+		for(int col = 0; col < 4; ++col){
+			result.m[row][col] = invOut[c++];
+		}
+	}
+	
+    return result;
+}
+
 
 void
 get_frustum_corners_world_space(mat4 vp, v4* corners){
-	mat4 inv = new_mat4_inverse(vp);
+	mat4 inv = invertRowMajorMESA(vp);
 	int i = 0;
 	v4 corner = {};
 	for(int x = 0; x < 2; ++x){
@@ -803,3 +885,4 @@ void print_mat4(const mat4& mat)
     }
     printf("\n");
 }
+
