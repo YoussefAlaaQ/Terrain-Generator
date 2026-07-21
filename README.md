@@ -6,6 +6,7 @@ features including:
 - PCF shadow mapping
 - PBR
 - Instance Grass blade rendering
+- Distance fog
 
 For compiling:
 - from CMD run shell for initializing MSVC then run build  
