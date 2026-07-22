@@ -40,7 +40,7 @@ uint pcg_hash(uint value)
 }
 
 vec2 v2_hash(vec2 p){
-	uvec2 q = uvec2(ivec2(p));  // ✅ handles negative coords correctly
+	uvec2 q = uvec2(ivec2(p));
     uint seed = q.x + q.y * 1619u;
     uint hx = pcg_hash(seed);
     uint hy = pcg_hash(seed + 314159265u);
